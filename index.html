@@ -11,7 +11,7 @@
 <style>
   :root{
     --cream:#FFF1B8;
-    --gold:#FFC300;
+    --gold:#FF7A1A;
     --brown:#1E1D1D;
     --soil:#140A00;
     --soil-2:#1F1305;
@@ -47,10 +47,6 @@
   /* Canvas painted with the warm shader, only visible through the petal-shaped mask */
   #petalCanvas{
     position:absolute; inset:0; width:100%; height:100%; display:block;
-    mask-image: url(#petalMask);
-    -webkit-mask-image: url(#petalMask);
-    mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat;
-    mask-size: 100% 100%; -webkit-mask-size: 100% 100%;
   }
   #flowerSvg{
     position:absolute; inset:0; width:100%; height:100%; overflow:visible;
@@ -160,16 +156,6 @@
 </head>
 <body>
 
-<!-- Hidden mask definition: the petal shapes that cut a window into the canvas below -->
-<svg width="0" height="0" style="position:absolute">
-  <defs>
-    <mask id="petalMask" maskContentUnits="objectBoundingBox" maskUnits="objectBoundingBox" x="0" y="0" width="1" height="1">
-      <rect x="0" y="0" width="1" height="1" fill="black"/>
-      <g id="maskPetals" fill="white"></g>
-    </mask>
-  </defs>
-</svg>
-
 <div class="dots" id="dots"></div>
 
 <main id="scene">
@@ -229,7 +215,6 @@ const dotsEl = document.getElementById('dots');
 const stageTextEl = document.getElementById('stageText');
 const hintEl = document.getElementById('hint');
 const sceneEl = document.getElementById('scene');
-const maskPetalsG = document.getElementById('maskPetals');
 
 SCENES.forEach(() => {
   const d = document.createElement('div');
@@ -237,32 +222,17 @@ SCENES.forEach(() => {
   dotsEl.appendChild(d);
 });
 
-/* Build the mask petals (objectBoundingBox 0..1 space) */
-const petalEls = [];
+/* Petal angles — the shape is now cut directly on the <canvas> below (petalCanvas),
+   not with a CSS mask, since mask-image referencing an SVG fragment doesn't render
+   reliably inside some in-app browsers (e.g. Instagram's). */
+const petalAngles = [];
 for (let p = 0; p < PETAL_COUNT; p++){
-  const angle = (360 / PETAL_COUNT) * p;
-  const ns = "http://www.w3.org/2000/svg";
-  const el = document.createElementNS(ns, "ellipse");
-  el.setAttribute("cx", "0.5");
-  el.setAttribute("cy", "0.24");
-  el.setAttribute("rx", "0.065");
-  el.setAttribute("ry", "0.17");
-  maskPetalsG.appendChild(el);
-  petalEls.push({ el, angle });
+  petalAngles.push((360 / PETAL_COUNT) * p);
 }
 
 function applyBloom(v){
   bloomCurrent = v;
   document.documentElement.style.setProperty('--bloom', v.toFixed(3));
-  const scale = 0.32 + v * 0.68;
-  const opacity = 0.15 + v * 0.85;
-  petalEls.forEach(({ el, angle }) => {
-    el.setAttribute("fill-opacity", opacity.toFixed(3));
-    el.setAttribute(
-      "transform",
-      `rotate(${angle} 0.5 0.5) translate(0.5 0.5) scale(${scale.toFixed(4)}) translate(-0.5 -0.5)`
-    );
-  });
 }
 
 function animateBloomTo(target){
@@ -344,9 +314,13 @@ renderScene();
    pintado solo dentro del hueco que recorta la máscara del girasol.
    ============================================================ */
 (function initShader(){
-  const canvas = document.getElementById('petalCanvas');
+  const canvas = document.getElementById('petalCanvas'); // visible 2D canvas
   const wrap = document.querySelector('.flower-wrap');
-  const gl = canvas.getContext('webgl', { antialias:false, alpha:true });
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const glCanvas = document.createElement('canvas'); // offscreen, renders the raw shader
+  const gl = glCanvas.getContext('webgl', { antialias:false, alpha:false });
   if (!gl) return;
 
   const VERT = `attribute vec2 a_position;
@@ -465,12 +439,13 @@ renderScene();
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
 
   const COLORS = [
-    [0.078,0.039,0], [0.117,0.113,0.113], [1,0.764,0], [1,0.945,0.721],
-    [1,0.945,0.721], [1,0.945,0.721], [1,0.945,0.721], [1,0.945,0.721]
+    [0.16,0.02,0.10], [0.55,0.05,0.12], [1.0,0.30,0.02],
+    [1.0,0.70,0.0], [1.0,0.20,0.45], [1.0,0.92,0.45],
+    [1.0,0.92,0.45], [1.0,0.92,0.45]
   ];
   const U = {
-    colorCount: 4, scale: 0.9, intensity: 0.5, warp: 0.6,
-    detail: 1.8, contrast: 1.05, brightness: 0.0, saturation: 1.05,
+    colorCount: 6, scale: 0.9, intensity: 0.5, warp: 0.6,
+    detail: 1.8, contrast: 1.15, brightness: 0.02, saturation: 1.35,
     vignette: 0.0, grain: 0.02, seed: 707.0, drift: 0.06,
     offsetX: 0.0, offsetY: 0.0, timeScale: 0.12
   };
@@ -496,9 +471,12 @@ renderScene();
     const rect = wrap.getBoundingClientRect();
     const w = Math.max(1, Math.round(rect.width * dpr));
     const h = Math.max(1, Math.round(rect.height * dpr));
+    if (glCanvas.width !== w || glCanvas.height !== h){
+      glCanvas.width = w; glCanvas.height = h;
+      gl.viewport(0, 0, w, h);
+    }
     if (canvas.width !== w || canvas.height !== h){
       canvas.width = w; canvas.height = h;
-      gl.viewport(0, 0, w, h);
     }
   }
   window.addEventListener('resize', resize);
@@ -507,12 +485,44 @@ renderScene();
   const start = performance.now();
   const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  /* Builds one combined Path2D with all 14 petals, positioned/rotated/sized
+     from the current bloom value — this is the actual "petal cutout", done
+     with plain Canvas 2D so it renders the same in every browser. */
+  function buildPetalPath(w, h){
+    const path = new Path2D();
+    const size = Math.min(w, h);
+    const cx = w / 2, cy = h / 2;
+    const s = 0.32 + bloomCurrent * 0.68;
+    const offset = 0.26 * size * s;
+    const rx = 0.065 * size * s;
+    const ry = 0.17 * size * s;
+    petalAngles.forEach((angleDeg) => {
+      const rad = (angleDeg * Math.PI) / 180;
+      const ex = cx + Math.sin(rad) * offset;
+      const ey = cy - Math.cos(rad) * offset;
+      path.ellipse(ex, ey, rx, ry, rad, 0, Math.PI * 2);
+    });
+    return path;
+  }
+
   function frame(now){
     resize();
     const t = reduceMotion ? 0 : ((now - start) / 1000) * U.timeScale;
-    gl.uniform4f(uni.scene, canvas.width, canvas.height, t, U.colorCount);
+    gl.uniform4f(uni.scene, glCanvas.width, glCanvas.height, t, U.colorCount);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-    if (!reduceMotion) requestAnimationFrame(frame);
+
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(glCanvas, 0, 0, w, h);
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.globalAlpha = 0.15 + bloomCurrent * 0.85;
+    ctx.fillStyle = '#fff';
+    ctx.fill(buildPetalPath(w, h));
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+
+    requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 })();
