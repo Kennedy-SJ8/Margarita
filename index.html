@@ -11,12 +11,13 @@
 <style>
   :root{
     --cream:#FFF1B8;
-    --gold:#FF7A1A;
+    --gold:#E8630F;
     --brown:#1E1D1D;
     --soil:#140A00;
-    --soil-2:#1F1305;
-    --ink: rgba(255,241,184,0.92);
-    --ink-soft: rgba(255,241,184,0.62);
+    --bg-1:#FFF8E8;
+    --bg-2:#F3E3C2;
+    --ink: rgba(43,27,14,0.92);
+    --ink-soft: rgba(43,27,14,0.6);
     --bloom: 0;
   }
   *{ box-sizing:border-box; }
@@ -24,7 +25,7 @@
     margin:0; padding:0; width:100%; height:100%;
     font-family:'Work Sans', sans-serif;
     overflow:hidden;
-    background: radial-gradient(ellipse at 50% 38%, var(--soil-2) 0%, var(--soil) 72%);
+    background: radial-gradient(ellipse at 50% 38%, var(--bg-1) 0%, var(--bg-2) 100%);
   }
   main{
     position:relative; z-index:2;
@@ -102,6 +103,29 @@
     font-family:'Fraunces', serif;
     font-style: italic;
     font-size: 1.05rem;
+    color: var(--gold);
+  }
+  .motto{
+    margin-top: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+  }
+  .motto span{
+    display: block;
+    width: 26px;
+    height: 1px;
+    background: var(--gold);
+    opacity: 0.55;
+  }
+  .motto p{
+    margin: 0;
+    font-family:'Fraunces', serif;
+    font-style: italic;
+    font-weight: 500;
+    font-size: clamp(1rem, 2.6vw, 1.2rem);
+    letter-spacing: 0.03em;
     color: var(--gold);
   }
   .hint{
@@ -202,6 +226,7 @@ const SCENES = [
     eyebrow: "",
     text: "Este girasol no pide nada.",
     sub: "Solo quería abrirse una vez más, por si lo ves.",
+    motto: "1000 VIDAS Y 5 DÍAS",
     final: true,
   },
 ];
@@ -263,6 +288,7 @@ function renderScene(){
     ${s.eyebrow ? `<p class="eyebrow">${s.eyebrow}</p>` : ''}
     <h1 class="line">${s.text}</h1>
     ${s.sub ? `<p class="sub">${s.sub}</p>` : ''}
+    ${s.motto ? `<div class="motto"><span></span><p>${s.motto}</p><span></span></div>` : ''}
     ${s.signature ? `<p class="sig">${s.signature}</p>` : ''}
     ${s.final ? `<button class="restart" id="restartBtn">ver de nuevo</button>` : ''}
   `;
